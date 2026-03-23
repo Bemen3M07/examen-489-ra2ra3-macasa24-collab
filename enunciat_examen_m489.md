@@ -7,8 +7,8 @@
 **Data:** ____________________  
 **Durada:** 2 hores  
 
-**Alumne/a:** ________________________________________________  
-**Grup:** __________________________________________________  
+**Alumne/a:** __Mario Calero______________________________________________  
+**Grup:** ____2n DAM______________________________________________  
 
 ---
 
@@ -42,7 +42,14 @@ Al projecte **Cars**, el widget `CarsPage` gestiona el número de pàgina actual
 **Resposta:**
 
 ```
-[Escriu la teva resposta aquí]
+setState és un mètode que notifica a Flutter que l'estat intern d'un widget ha canviat . Flutter torna a executar el mètode build() del widget i redibuixa la UI amb els nous valors.
+No afecta a tota la app y només afecta als widgets de dins d'aquest mètode.
+
+El mètode _loadPage() fa dues crides a setState perquè:
+-La primera (a l'inici) serveix per indicar que s'està carregant, mostrant un login.
+-la segona (al final) actualitza les dades amb el resultat de l'API y elimina el login.
+
+Si es fa una sola crida, no es podria reflectir correctament l'estat intermedi de la carrega a la UI.
 ```
 
 ---
@@ -56,7 +63,15 @@ Al projecte **Camera**, el widget `CameraScreen` utilitza un `CameraController` 
 **Resposta:**
 
 ```
-[Escriu la teva resposta aquí]
+El mètode és dispose().
+
+@override
+void dispose() {
+  _controller.dispose();
+  super.dispose();
+}
+
+És imprescindible cridar-lo perquè el CameraController utilitza recursos del sistema (càmera, memoria) Si no s'alliberen, es poden profuir fuites de memòria o bloquejos de càmera per altres aplicaciçons. 
 ```
 
 ---
@@ -70,7 +85,16 @@ Al projecte **Camera**, el widget `CameraScreen` utilitza un `CameraController` 
 **Resposta:**
 
 ```
-[Escriu la teva resposta aquí]
+- No es pot fer await a initState() perquè aquest mètode no és async i ha de ser síncron. Flutter necessita que initState s’executi ràpidament per inicialitzar el widget.
+
+- FutureBuilder millora l’experiència d’usuari perquè permet mostrar un estat de càrrega (loading) mentre s’espera la resposta, en lloc de bloquejar la UI.
+
+- _initializeControllerFuture guarda el Future de la inicialització. El FutureBuilder escolta aquest Future i:
+  - Mostra un loading mentre està pendent
+  - Mostra el contingut quan es completa
+  - Mostra error si falla
+
+Treballen junts perquè el FutureBuilder reconstrueix la UI automàticament segons l’estat del Future.
 ```
 
 ---
@@ -84,12 +108,35 @@ Analitza el mètode `getCarsPage(int page, int limit)` de `car_http_service.dart
 Què passaria si el servidor de l'API trigués 60 segons a respondre? L'aplicació quedaria bloquejada per a l'usuari? Per què? Escriu com implementaries un *timeout* de 10 segons a la petició HTTP.
 
 **Resposta:**
+L’app no es bloquejaria perquè la petició és asíncrona, però l’usuari quedaria esperant molt temps. El timeout evita esperes excessives.
 
 ```dart
 // Escriu la modificació al getCarsPage aquí:
 Future<List<CarsModel>> getCarsPage(int page, int limit) async {
-  // ...
+  final uri = _buildUri('/v1/cars', {
+    'page': page.toString(),
+    'limit': limit.toString(),
+  });
+
+  try {
+    final response = await http
+        .get(uri)
+        .timeout(const Duration(seconds: 10));
+
+    if (response.statusCode == 200) {
+      final List data = jsonDecode(response.body);
+      return data.map((e) => CarsModel.fromMapToCarObject(e)).toList();
+    } else {
+      throw Exception('Error en la resposta del servidor');
+    }
+  } on TimeoutException {
+    throw Exception('La petició ha tardat massa (timeout)');
+  } catch (e) {
+    throw Exception('Error de xarxa: $e');
+  }
 }
+  // ...
+
 ```
 
 ---
@@ -103,7 +150,13 @@ Analitza el constructor `factory CarsModel.fromMapToCarObject(Map<String, dynami
 **Resposta:**
 
 ```
-[Escriu la teva resposta aquí]
+Es pot convertir el valor a int de forma segura comprovant el tipus:
+
+year: json['year'] is int 
+  ? json['year'] 
+  : int.tryParse(json['year'].toString()) ?? 0
+
+Això evita errors si arriba com String i també controla valors incorrectes.
 ```
 
 ---
@@ -113,7 +166,14 @@ Analitza el constructor `factory CarsModel.fromMapToCarObject(Map<String, dynami
 **Resposta:**
 
 ```
-[Escriu la teva resposta aquí]
+És millor simular el JSON perquè:
+
+- Els tests no depenen d’internet ni d’un servidor extern.
+- Són més ràpids i deterministes.
+- Evita errors per canvis a l’API real.
+- Permet controlar exactament les dades d’entrada.
+
+Això fa que el test sigui realment unitari i fiable.
 ```
 
 ---
@@ -141,7 +201,44 @@ class CarDetailPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // implementa aquí
+    final icon = car.type == 'SUV'
+        ? Icons.directions_car
+        : Icons.car_rental;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('${car.make} ${car.model}'),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Text(
+              '${car.make} ${car.model}',
+              style: const TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 20),
+            Icon(icon, size: 50),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'Cotxe seleccionat: ${car.make} ${car.model}',
+                    ),
+                  ),
+                );
+              },
+              child: const Text('Seleccionar'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 ```
@@ -191,7 +288,39 @@ Requisits:
 **Resposta:**
 
 ```dart
-// Escriu aquí la teva implementació completa del mètode:
+Future<List<CarsModel>> getCarsByFilter({
+  String? make,
+  String? model,
+}) async {
+  final queryParams = <String, String>{};
+
+  if (make != null && make.isNotEmpty) {
+    queryParams['make'] = make;
+  }
+
+  if (model != null && model.isNotEmpty) {
+    queryParams['model'] = model;
+  }
+
+  final uri = _buildUri('/v1/cars/search', queryParams);
+
+  try {
+    final response = await http
+        .get(uri)
+        .timeout(const Duration(seconds: 10));
+
+    if (response.statusCode == 200) {
+      final List data = jsonDecode(response.body);
+      return data.map((e) => CarsModel.fromMapToCarObject(e)).toList();
+    } else {
+      throw Exception('Error en la resposta del servidor');
+    }
+  } on TimeoutException {
+    throw Exception('Timeout en la petició');
+  } catch (e) {
+    throw Exception('Error: $e');
+  }
+}
 
 ```
 
